@@ -25,11 +25,10 @@ Pass your ENTIRE response text as the "summary" parameter — do NOT summarize o
 This tool sends your response to the WPS user and waits for their reply.
 
 HANDLING THE RESULT:
-- If the result contains a user message (not "__WAITING__"), continue the conversation with that message.
-- If the result is "__WAITING__", it means the user hasn't replied YET but the connection timed out.
-  You MUST call interactive_feedback AGAIN immediately with the SAME summary to continue waiting.
-  Keep retrying as long as you get "__WAITING__" — up to 10 retries (about 10 minutes total).
-- Only end the task when you get an actual empty string "" (not "__WAITING__"), which means the real timeout expired.
+- If the result contains a user message, continue the conversation with that message.
+- If the result is "__WAITING__", call interactive_feedback AGAIN immediately with the SAME summary to continue waiting.
+- If the result is empty string "", the user chose not to reply — end the task normally.
+- The tool may take several minutes to return while waiting for the user. This is normal — do NOT treat slow return as an error.
 
 CRITICAL RULES:
 - Do NOT call relay_interactive_feedback — it does not exist here. Use interactive_feedback only.
@@ -166,6 +165,7 @@ export class AcpAgent implements Agent {
     const cwd = options.cwd ?? process.cwd();
 
     const feedbackServerPath = path.resolve(__dirname, "..", "wps-feedback-server.cjs");
+    const timeoutHookPath = path.resolve(__dirname, "..", "mcp-timeout-hook.cjs");
     const feedbackPort = parseInt(options.env?.WPS_FEEDBACK_PORT || "19836", 10);
 
     // Disable conflicting MCPs via project .cursor/mcp.json.
@@ -187,8 +187,11 @@ export class AcpAgent implements Agent {
     if (options.feedbackBridge) {
       ensureGlobalMcpEntry("wps-feedback", {
         command: "node",
-        args: [feedbackServerPath],
-        env: { WPS_FEEDBACK_PORT: String(feedbackPort) },
+        args: ["--require", timeoutHookPath, feedbackServerPath],
+        env: {
+          WPS_FEEDBACK_PORT: String(feedbackPort),
+          MCP_REQUEST_TIMEOUT_MS: "600000",
+        },
         timeout: 600,
       });
     }

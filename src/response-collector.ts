@@ -26,7 +26,7 @@ function extractMediaPaths(text: string): { path: string; type: "image" | "video
     }
   };
 
-  const markerRe = /\[WEIXIN_(IMAGE|VIDEO|FILE):([^\]]+)\]/g;
+  const markerRe = /\[(?:WOA|WECHAT|WEIXIN)_(IMAGE|VIDEO|FILE):([^\]]+)\]/g;
   for (const m of text.matchAll(markerRe)) {
     const kind = m[1].toLowerCase() as "image" | "video" | "file";
     add(m[2].trim(), kind);
@@ -56,7 +56,7 @@ function extractMediaPaths(text: string): { path: string; type: "image" | "video
 }
 
 function stripMediaMarkers(text: string, extractedPath: string): string {
-  text = text.replace(/\[WEIXIN_(?:IMAGE|VIDEO|FILE):[^\]]+\]\s*/g, "");
+  text = text.replace(/\[(?:WOA|WECHAT|WEIXIN)_(?:IMAGE|VIDEO|FILE):[^\]]+\]\s*/g, "");
   const escaped = extractedPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   text = text.replace(new RegExp(`!\\[[^\\]]*\\]\\(${escaped}\\)\\s*`, "g"), "");
   return text.trim();

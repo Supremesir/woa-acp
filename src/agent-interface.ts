@@ -1,6 +1,6 @@
 /**
  * Agent interface — any AI backend that can handle a chat message.
- * Copied from weixin-agent-sdk for standalone use.
+ * Copied from wechat-sdk for standalone use.
  */
 
 export interface Agent {
