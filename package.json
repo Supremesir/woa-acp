@@ -17,7 +17,8 @@
   },
   "files": [
     "dist",
-    "wps-feedback-server.cjs"
+    "wps-feedback-server.cjs",
+    "mcp-timeout-hook.cjs"
   ],
   "engines": {
     "node": ">=22"
