@@ -1,0 +1,105 @@
+# woa-acp
+
+WPS Office AI (Agentspace) + ACP 适配器 — 将 WPS 数字员工平台接入 Cursor CLI、Claude Code、Codex 等 ACP Agent。
+
+## 架构
+
+```
+WPS 数字员工平台 (agentspace.wps.cn)
+        ↕ WebSocket
+    woa-acp 适配器
+        ↕ ACP (Agent Client Protocol)
+  Cursor CLI / Claude Code / Codex
+```
+
+## 快速开始
+
+### 从 tgz 安装（同事分发）
+
+```bash
+npm install -g woa-acp-0.2.0.tgz
+```
+
+### 1. 登录 WPS 账号
+
+```bash
+# 自建数字员工（必须传入你的 app_id）
+woa-acp login --app-id AK20260313XXXXXX
+
+# 默认官方数字员工
+woa-acp login
+```
+
+> **重要：** `app_id` 是你在 [WPS 数字员工开发平台](https://agentspace.wps.cn) 创建的数字员工标识。每个人的 app_id 不同，请从平台获取自己的。
+
+### 2. 启动
+
+```bash
+# Cursor CLI (ACP 模式)
+woa-acp start -- agent acp
+
+# Claude Code
+woa-acp claude-code
+
+# Codex
+woa-acp codex
+
+# 自定义 Agent
+woa-acp start -- node ./my-agent.js
+```
+
+### 可选参数
+
+| 参数 | 说明 |
+|------|------|
+| `--app-id <id>` | 数字员工 app_id |
+| `--model <model>` | 指定模型（如 `claude-3.5-sonnet`） |
+
+## 追问模式 (Feedback)
+
+一次请求内多轮对话，无需额外计费：
+
+```
+用户: "帮我写一个排序算法"
+  → AI 回复 + "💬 追问模式已开启，10 分钟内回复可继续当前对话"
+用户: "用快速排序实现"
+  → AI 在同一轮继续回复...
+```
+
+内部采用轮询机制：Cursor CLI 的 60 秒 MCP 工具超时到期后，agent 自动重试 `interactive_feedback`，feedback-ipc 的 pending 保持活跃，最长等待 10 分钟。
+
+## MCP 管理
+
+启动时自动：
+
+- 在全局 `~/.cursor/mcp.json` 中注册 `wps-feedback` MCP
+- 在项目 `.cursor/mcp.json` 中禁用冲突的 `relay-mcp`、`weixin-feedback`
+- 全局配置中的其他 MCP 自动传入 ACP 会话
+
+## 凭证存储
+
+凭证位于 `~/.openclaw/openclaw.json`，与 OpenClaw 官方插件格式兼容。`wps_sid` 使用 AES-256-GCM 加密，密钥从 `app_id` 派生。
+
+## 开发
+
+```bash
+npm install
+npm run typecheck
+npm run build
+
+# 本地开发
+npx tsx main.ts login --app-id YOUR_APP_ID
+npx tsx main.ts start -- agent acp
+```
+
+### 打包分发
+
+```bash
+npm run build
+npm pack
+# 生成 woa-acp-0.2.0.tgz
+```
+
+## 协议
+
+MIT
