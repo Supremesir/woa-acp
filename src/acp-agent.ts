@@ -168,22 +168,15 @@ export class AcpAgent implements Agent {
     const timeoutHookPath = path.resolve(__dirname, "..", "mcp-timeout-hook.cjs");
     const feedbackPort = parseInt(options.env?.WPS_FEEDBACK_PORT || "19836", 10);
 
-    // Disable conflicting MCPs via project .cursor/mcp.json.
-    // We also disable any project-level wps-feedback to ensure only the
-    // ACP-session instance runs (prevents duplicate instances).
     const disableList = [...(options.excludeMcpServers ?? [])];
-    if (!disableList.includes("weixin-feedback")) {
-      disableList.push("weixin-feedback");
+    for (const name of ["weixin-feedback", "wechat-feedback"]) {
+      if (!disableList.includes(name)) disableList.push(name);
     }
     disableMcpServers(cwd, disableList);
 
     const excludeSet = new Set(disableList);
     const onlySet = options.onlyMcpServers ? new Set(options.onlyMcpServers) : undefined;
 
-    // Register wps-feedback in the GLOBAL ~/.cursor/mcp.json (same as
-    // weixin-feedback).  MCPs loaded from global config appear to get
-    // a much longer tool-call timeout from Cursor CLI than MCPs passed
-    // through the ACP session's mcpServers (which has a ~60s default).
     if (options.feedbackBridge) {
       ensureGlobalMcpEntry("wps-feedback", {
         command: "node",
@@ -193,6 +186,7 @@ export class AcpAgent implements Agent {
           MCP_REQUEST_TIMEOUT_MS: "600000",
         },
         timeout: 600,
+        autoApprove: ["interactive_feedback"],
       });
     }
 

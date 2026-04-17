@@ -32,7 +32,7 @@
   "scripts": {
     "build": "tsdown",
     "login": "tsx main.ts login",
-    "start": "tsx main.ts start",
+    "start": "tsx main.ts start -- agent acp",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

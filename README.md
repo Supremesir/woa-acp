@@ -66,14 +66,21 @@ woa-acp start -- node ./my-agent.js
   → AI 在同一轮继续回复...
 ```
 
-内部采用轮询机制：Cursor CLI 的 60 秒 MCP 工具超时到期后，agent 自动重试 `interactive_feedback`，feedback-ipc 的 pending 保持活跃，最长等待 10 分钟。
+### 超时防护（双重保险）
+
+| 层级 | 机制 | 说明 |
+|------|------|------|
+| 1 | `mcp-timeout-hook.cjs` | 预加载脚本 patch MCP SDK 的 60s 默认超时为 10 分钟 |
+| 2 | `__WAITING__` 轮询 | 若 Hook 未生效，MCP server 返回 `__WAITING__`，agent 自动重试 |
+
+启动时通过 `node --require mcp-timeout-hook.cjs wps-feedback-server.cjs` 加载 Hook。
 
 ## MCP 管理
 
 启动时自动：
 
-- 在全局 `~/.cursor/mcp.json` 中注册 `wps-feedback` MCP
-- 在项目 `.cursor/mcp.json` 中禁用冲突的 `relay-mcp`、`weixin-feedback`
+- 在全局 `~/.cursor/mcp.json` 中注册 `wps-feedback` MCP（含 timeout hook、autoApprove）
+- 在项目 `.cursor/mcp.json` 中禁用冲突的 `relay-mcp`、`weixin-feedback`、`wechat-feedback`
 - 全局配置中的其他 MCP 自动传入 ACP 会话
 
 ## 凭证存储
@@ -87,9 +94,9 @@ npm install
 npm run typecheck
 npm run build
 
-# 本地开发
-npx tsx main.ts login --app-id YOUR_APP_ID
-npx tsx main.ts start -- agent acp
+# 本地开发（使用 pnpm）
+pnpm run login -- --app-id YOUR_APP_ID
+pnpm start
 ```
 
 ### 打包分发
