@@ -10,14 +10,11 @@
  *   npx woa-acp start -- <command> [args...]        # Start with custom agent
  */
 
-import fs from "node:fs";
-
 import { AcpAgent } from "./src/acp-agent.js";
 import { FeedbackIpcServer } from "./src/feedback-ipc.js";
 import { WpsGateway, type WpsInboundMessage, type OutboundContext } from "./src/gateway.js";
 import { loadAccount, saveAccount, resolveWsUrl } from "./src/config.js";
 import { loginCloudOAuth } from "./src/auth.js";
-import type { ChatResponse } from "./src/agent-interface.js";
 
 const BUILTIN_AGENTS: Record<string, { command: string }> = {
   "claude-code": { command: "claude-agent-acp" },
@@ -40,34 +37,6 @@ const appId = extractFlag("--app-id");
 function log(msg: string) {
   const ts = new Date().toISOString().slice(11, 23);
   console.log(`[woa-acp ${ts}] ${msg}`);
-}
-
-/**
- * Combine text + media into a single outbound string.
- * Follows the OpenClaw pattern: media URLs are appended to the text body.
- * Agentspace renders URLs (images/files) inline in the chat.
- * Local file paths are converted to served HTTP URLs via feedbackIpc.
- */
-function buildOutboundText(
-  response: ChatResponse,
-  ipc: FeedbackIpcServer,
-): string {
-  const parts: string[] = [];
-  if (response.text?.trim()) {
-    parts.push(ipc.processMediaMarkers(response.text.trim()));
-  }
-  if (response.media?.url) {
-    let mediaUrl = response.media.url;
-    if (!mediaUrl.startsWith("http://") && !mediaUrl.startsWith("https://")) {
-      try {
-        if (fs.statSync(mediaUrl).isFile()) {
-          mediaUrl = ipc.registerMediaFile(mediaUrl);
-        }
-      } catch { /* not a local file */ }
-    }
-    parts.push(mediaUrl);
-  }
-  return parts.join("\n\n");
 }
 
 async function doLogin(): Promise<void> {
@@ -149,8 +118,7 @@ async function startAgent(acpCommand: string, acpArgs: string[] = []) {
 
       feedbackIpc.setSendCallback(async (_userId: string, text: string) => {
         const ctx = contextMap.get(chatId) ?? context;
-        const processed = feedbackIpc.processMediaMarkers(text);
-        await gateway.sendMessage(ctx, processed);
+        await gateway.sendMessage(ctx, text);
       });
 
       processingChats.add(chatId);
@@ -166,10 +134,9 @@ async function startAgent(acpCommand: string, acpArgs: string[] = []) {
           return;
         }
 
-        const combined = buildOutboundText(response, feedbackIpc);
-        if (combined) {
-          await gateway.sendMessage(context, combined);
-          log(`sent response to chatId=${chatId}: "${combined.slice(0, 50)}"`);
+        if (response.text) {
+          await gateway.sendMessage(context, response.text);
+          log(`sent response to chatId=${chatId}: "${response.text.slice(0, 50)}"`);
         }
       } catch (err) {
         log(`error processing message: ${err}`);
