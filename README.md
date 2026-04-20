@@ -2,6 +2,10 @@
 
 WPS Office AI (Agentspace) + ACP 适配器 — 将 WPS 数字员工平台接入 Cursor CLI、Claude Code、Codex 等 ACP Agent。
 
+> **致谢：** 本项目的网关协议和认证流程参考了 [OpenClaw](https://github.com/openclaw/openclaw) 的 Agentspace 通道插件。
+>
+> **姊妹项目：** 如需将 AI Agent 接入微信，请查看 [wechat-acp](https://github.com/user/wechat-acp)。两个项目架构相同，共享相同的 ACP 适配层设计和 MCP Feedback 追问机制。
+
 ## 架构
 
 ```
@@ -75,13 +79,37 @@ woa-acp start -- node ./my-agent.js
 
 启动时通过 `node --require mcp-timeout-hook.cjs wps-feedback-server.cjs` 加载 Hook。
 
+## 消息发送
+
+当前通过 WebSocket 发送**纯文本**消息（支持 Markdown 格式）。Agentspace 前端会自动渲染 URL 链接和 Markdown。
+
+> **注意：** 图片/文件的原生发送需要 WPS REST API + `storage_key`（应用级别的 SecretKey 授权），目前未实现。如需在 Agentspace 中展示图片，可在文本中直接包含公开可访问的图片 URL。
+
+## 配合截图 MCP 使用（可选）
+
+在 `~/.cursor/mcp.json` 中添加截图 MCP，Agent 就能截取屏幕或窗口：
+
+```json
+{
+  "mcpServers": {
+    "screenshot-server": {
+      "command": "npx",
+      "args": ["-y", "screenshot-mcp"],
+      "autoApprove": ["list_windows", "list_displays", "screenshot_window", "screenshot_screen", "screenshot_region"]
+    }
+  }
+}
+```
+
+推荐使用 [screenshot-mcp](https://github.com/chunlea/screenshot-mcp)（跨平台，支持窗口/全屏/区域截图）。
+
 ## MCP 管理
 
 启动时自动：
 
 - 在全局 `~/.cursor/mcp.json` 中注册 `wps-feedback` MCP（含 timeout hook、autoApprove）
 - 在项目 `.cursor/mcp.json` 中禁用冲突的 `relay-mcp`、`weixin-feedback`、`wechat-feedback`
-- 全局配置中的其他 MCP 自动传入 ACP 会话
+- 全局配置中的其他 MCP（如截图 MCP）自动传入 ACP 会话
 
 ## 凭证存储
 
