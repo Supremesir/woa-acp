@@ -94,14 +94,19 @@ woa-acp start -- node ./my-agent.js
   "mcpServers": {
     "screenshot-server": {
       "command": "npx",
-      "args": ["-y", "screenshot-mcp"],
-      "autoApprove": ["list_windows", "list_displays", "screenshot_window", "screenshot_screen", "screenshot_region"]
+      "args": ["-y", "universal-screenshot-mcp"],
+      "autoApprove": ["take_screenshot", "take_system_screenshot"]
     }
   }
 }
 ```
 
-推荐使用 [screenshot-mcp](https://github.com/chunlea/screenshot-mcp)（跨平台，支持窗口/全屏/区域截图）。
+推荐使用 [universal-screenshot-mcp](https://github.com/sethbang/mcp-screenshot-server)（跨平台，支持窗口/全屏/区域截图，Windows 高 DPI 兼容）。
+
+Agent 可通过 `take_system_screenshot` 截图：
+- `mode: "window"` + `windowName` — 截取指定窗口
+- `mode: "fullscreen"` — 截取所有显示器（可通过 `display: 1` 指定单个）
+- `mode: "region"` — 截取指定坐标区域
 
 ## MCP 管理
 

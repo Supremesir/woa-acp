@@ -37,8 +37,8 @@ Agentspace renders Markdown and URLs. To include an image or file in your respon
   - Local file marker: [WOA_IMAGE:/absolute/path/to/image.png]
   - Local file marker: [WOA_FILE:/absolute/path/to/file.pdf]
 If you use the screenshot MCP to capture a screenshot, include the saved file path using the [WOA_IMAGE:path] marker.
-You can use screenshot_window (by window title) or screenshot_screen (full screen) with save_dir parameter.
-Example: After calling screenshot_screen with save_dir "C:\\Users\\Fang", include [WOA_IMAGE:C:\\Users\\Fang\\screenshot.png] in your summary.
+You can use take_system_screenshot with mode "window" + windowName to capture a specific window, or mode "fullscreen" for the entire screen.
+Example: After calling take_system_screenshot, include [WOA_IMAGE:path/to/saved/screenshot.png] in your summary.
 
 CRITICAL RULES:
 - Do NOT call relay_interactive_feedback — it does not exist here. Use interactive_feedback only.
