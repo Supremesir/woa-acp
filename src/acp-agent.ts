@@ -188,9 +188,8 @@ export class AcpAgent implements Agent {
       });
     }
 
-    // Exclude wps-feedback from ACP-provided server list so Cursor CLI
-    // discovers it from ~/.cursor/mcp.json directly (with timeout:600).
-    const excludeSet = new Set([...disableList, "wps-feedback"]);
+    // Pass wps-feedback through ACP (agent acp mode doesn't read global mcp.json)
+    const excludeSet = new Set(disableList);
     const onlySet = options.onlyMcpServers ? new Set(options.onlyMcpServers) : undefined;
     this.mcpServers = buildMcpServerList(excludeSet, onlySet);
 

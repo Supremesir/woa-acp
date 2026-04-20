@@ -129,9 +129,13 @@ async function startAgent(acpCommand: string, acpArgs: string[] = []) {
         });
 
         if (feedbackIpc.wasFeedbackUsed(chatId)) {
-          log(`feedback was used for chatId=${chatId}, response already sent by MCP tool`);
           feedbackIpc.resetFeedbackUsed(chatId);
-          return;
+          const hasContent = !!(response.text?.trim() || response.media);
+          if (!hasContent) {
+            log(`feedback was used for chatId=${chatId}, skipping empty final response`);
+            return;
+          }
+          log(`feedback was used for chatId=${chatId}, but agent returned additional content — sending`);
         }
 
         if (response.text) {
