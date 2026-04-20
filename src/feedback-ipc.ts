@@ -60,6 +60,13 @@ export class FeedbackIpcServer implements FeedbackBridge {
     if (this.activeUserId === userId) {
       this.activeUserId = null;
     }
+    const entry = this.pending.get(userId);
+    if (entry) {
+      clearTimeout(entry.timeout);
+      for (const sub of entry.subscribers) sub({ text: "" });
+      this.pending.delete(userId);
+      log(`cleared stale pending for user=${userId}`);
+    }
   }
 
   deliverReply(userId: string, text: string, media?: FeedbackMedia): boolean {
