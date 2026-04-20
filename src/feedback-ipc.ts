@@ -7,6 +7,11 @@ const FEEDBACK_TIMEOUT_MS = parseInt(
   process.env.WPS_FEEDBACK_TIMEOUT_MS || "600000",
   10,
 );
+/** Per-HTTP-request poll interval. Must be shorter than Cursor CLI's 60s MCP timeout. */
+const POLL_INTERVAL_MS = parseInt(
+  process.env.WPS_FEEDBACK_POLL_MS || "50000",
+  10,
+);
 
 function log(msg: string) {
   const ts = new Date().toISOString().slice(11, 23);
@@ -22,6 +27,8 @@ type PendingFeedback = {
   subscribers: Array<(reply: FeedbackReply) => void>;
   timeout: ReturnType<typeof setTimeout>;
   createdAt: number;
+  /** Buffered reply for late piggyback (user replied between poll cycles). */
+  bufferedReply?: FeedbackReply;
 };
 
 export class FeedbackIpcServer implements FeedbackBridge {
@@ -62,11 +69,17 @@ export class FeedbackIpcServer implements FeedbackBridge {
       return false;
     }
     clearTimeout(entry.timeout);
-    this.pending.delete(userId);
     log(`deliverReply: delivered to user=${userId} (${entry.subscribers.length} subscriber(s)), text="${text.slice(0, 50)}"${media ? ` +media(${media.mimeType})` : ""}`);
+    const reply: FeedbackReply = { text, media };
     for (const sub of entry.subscribers) {
-      sub({ text, media });
+      sub(reply);
     }
+    entry.subscribers = [];
+    entry.bufferedReply = reply;
+    setTimeout(() => {
+      const cur = this.pending.get(userId);
+      if (cur === entry) this.pending.delete(userId);
+    }, 120_000);
     return true;
   }
 
@@ -129,22 +142,30 @@ export class FeedbackIpcServer implements FeedbackBridge {
 
     const existing = this.pending.get(userId);
     if (existing) {
-      // Cursor CLI timed out the previous MCP tool call (~60s) but the user
-      // hasn't replied yet.  The agent retried interactive_feedback, which
-      // sends a new HTTP request here.  Instead of creating a new pending
-      // (which would cancel the existing one), we "piggyback" — subscribe
-      // to the same pending and wait for the user's actual reply.
+      if (existing.bufferedReply) {
+        const reply = existing.bufferedReply;
+        this.pending.delete(userId);
+        log(`returning buffered reply for user=${userId}: "${reply.text.slice(0, 50)}"`);
+        const responseBody: Record<string, unknown> = { reply: reply.text };
+        if (reply.media) responseBody.media = reply.media;
+        res.writeHead(200);
+        res.end(JSON.stringify(responseBody));
+        return;
+      }
+
       const age = Math.round((Date.now() - existing.createdAt) / 1000);
       log(`piggyback on existing pending for user=${userId} (age=${age}s, subs=${existing.subscribers.length}→${existing.subscribers.length + 1})`);
 
-      const reply = await new Promise<FeedbackReply>((resolve) => {
-        existing.subscribers.push(resolve);
-      });
+      const reply = await this.raceWithPoll(
+        new Promise<FeedbackReply>((resolve) => {
+          existing.subscribers.push(resolve);
+        }),
+      );
 
       log(
         reply.text
           ? `got reply (piggyback) user=${userId}: "${reply.text.slice(0, 50)}"`
-          : `timeout (piggyback) user=${userId}`,
+          : `poll timeout (piggyback) user=${userId}`,
       );
 
       const responseBody: Record<string, unknown> = { reply: reply.text };
@@ -154,15 +175,14 @@ export class FeedbackIpcServer implements FeedbackBridge {
       return;
     }
 
-    // First request for this userId — create the pending and send summary.
     log(`feedback for user=${userId} (${(summary?.length ?? 0)} chars)`);
 
     const replyPromise = new Promise<FeedbackReply>((resolve) => {
       const timeout = setTimeout(() => {
         const entry = this.pending.get(userId);
-        if (entry) {
+        if (entry && !entry.bufferedReply) {
           this.pending.delete(userId);
-          log(`timeout waiting for reply from user=${userId} (${entry.subscribers.length} subscriber(s))`);
+          log(`full timeout for user=${userId} (${entry.subscribers.length} subscriber(s))`);
           for (const sub of entry.subscribers) sub({ text: "" });
         }
       }, FEEDBACK_TIMEOUT_MS);
@@ -186,17 +206,31 @@ export class FeedbackIpcServer implements FeedbackBridge {
       }
     }
 
-    const reply = await replyPromise;
+    const reply = await this.raceWithPoll(replyPromise);
     log(
       reply.text
         ? `got reply from user=${userId}: "${reply.text.slice(0, 50)}"${reply.media ? " +media" : ""}`
-        : `timeout for user=${userId}`,
+        : `poll timeout for user=${userId}`,
     );
 
     const responseBody: Record<string, unknown> = { reply: reply.text };
     if (reply.media) responseBody.media = reply.media;
     res.writeHead(200);
     res.end(JSON.stringify(responseBody));
+  }
+
+  /**
+   * Race a reply promise against POLL_INTERVAL_MS.  If the poll timer wins,
+   * return an empty reply so the MCP server can return __WAITING__ before
+   * Cursor CLI's 60s timeout.  The underlying pending survives.
+   */
+  private raceWithPoll(replyP: Promise<FeedbackReply>): Promise<FeedbackReply> {
+    return Promise.race([
+      replyP,
+      new Promise<FeedbackReply>((resolve) =>
+        setTimeout(() => resolve({ text: "" }), POLL_INTERVAL_MS),
+      ),
+    ]);
   }
 
   close(): void {
