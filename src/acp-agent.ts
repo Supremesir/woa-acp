@@ -43,9 +43,8 @@ type RawMcpEntry = {
 
 /**
  * Write project .cursor/mcp.json to disable conflicting MCP servers.
- * We do NOT register wps-feedback here — it is passed through the ACP
- * session's mcpServers to avoid duplicate instances that interfere
- * with each other's pending feedback state.
+ * wps-feedback is NOT disabled here — it lives in global config with
+ * timeout:600 and we want Cursor CLI to discover it directly.
  */
 function disableMcpServers(cwd: string, names: string[]): void {
   if (names.length === 0) return;
@@ -73,21 +72,13 @@ function disableMcpServers(cwd: string, names: string[]): void {
     }
   }
 
-  // Also disable wps-feedback in project config to prevent Cursor from
-  // loading a second instance alongside the one from the ACP session.
-  const fbEntry = existing["wps-feedback"] as Record<string, unknown> | undefined;
-  if (fbEntry && fbEntry.disabled !== true) {
-    existing["wps-feedback"] = { ...fbEntry, disabled: true };
-    changed = true;
-  }
-
   if (changed) {
     fs.mkdirSync(cursorDir, { recursive: true });
     fs.writeFileSync(
       configPath,
       JSON.stringify({ mcpServers: existing }, null, 2) + "\n",
     );
-    log(`wrote .cursor/mcp.json — disabled: ${[...names, ...(fbEntry ? ["wps-feedback"] : [])].join(", ")}`);
+    log(`wrote .cursor/mcp.json — disabled: ${names.join(", ")}`);
   }
 }
 
@@ -174,9 +165,6 @@ export class AcpAgent implements Agent {
     }
     disableMcpServers(cwd, disableList);
 
-    const excludeSet = new Set(disableList);
-    const onlySet = options.onlyMcpServers ? new Set(options.onlyMcpServers) : undefined;
-
     if (options.feedbackBridge) {
       ensureGlobalMcpEntry("wps-feedback", {
         command: "node",
@@ -190,7 +178,10 @@ export class AcpAgent implements Agent {
       });
     }
 
-    // Build server list — now includes wps-feedback from global config.
+    // Exclude wps-feedback from ACP-provided server list so Cursor CLI
+    // discovers it from ~/.cursor/mcp.json directly (with timeout:600).
+    const excludeSet = new Set([...disableList, "wps-feedback"]);
+    const onlySet = options.onlyMcpServers ? new Set(options.onlyMcpServers) : undefined;
     this.mcpServers = buildMcpServerList(excludeSet, onlySet);
 
     log(`MCP servers: ${this.mcpServers.map((s) => s.name).join(", ") || "(none)"}`);
