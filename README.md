@@ -4,7 +4,7 @@ WPS Office AI (Agentspace) + ACP 适配器 — 将 WPS 数字员工平台接入 
 
 > **致谢：** 本项目的网关协议和认证流程参考了 [OpenClaw](https://github.com/openclaw/openclaw) 的 Agentspace 通道插件。
 >
-> **姊妹项目：** 如需将 AI Agent 接入微信，请查看 [wechat-acp](https://github.com/user/wechat-acp)。两个项目架构相同，共享相同的 ACP 适配层设计和 MCP Feedback 追问机制。
+> **姊妹项目：** 如需将 AI Agent 接入微信，请查看 [wechat-acp](https://github.com/Supremesir/wechat-acp)。两个项目架构相同，共享相同的 ACP 适配层设计和 MCP Feedback 追问机制。
 
 ## 架构
 
