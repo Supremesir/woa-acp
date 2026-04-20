@@ -30,6 +30,15 @@ HANDLING THE RESULT:
 - If the result is empty string "", the user chose not to reply — end the task normally.
 - The tool may take several minutes to return while waiting for the user. This is normal — do NOT treat slow return as an error.
 
+SENDING IMAGES/MEDIA:
+Agentspace renders Markdown and URLs. To include an image or file in your response:
+  - Markdown image: ![description](https://example.com/image.png)
+  - Direct URL on its own line: https://example.com/file.pdf
+  - Local file marker: [WOA_IMAGE:/absolute/path/to/image.png]
+  - Local file marker: [WOA_FILE:/absolute/path/to/file.pdf]
+If you use the screenshot MCP to capture a screenshot, include the saved file path using the [WOA_IMAGE:path] marker.
+Example: After capturing a screenshot saved to C:\\Users\\Fang\\screenshot.png, include [WOA_IMAGE:C:\\Users\\Fang\\screenshot.png] in your summary.
+
 CRITICAL RULES:
 - Do NOT call relay_interactive_feedback — it does not exist here. Use interactive_feedback only.
 - Keep responses concise. Markdown is supported.`;

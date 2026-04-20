@@ -1,4 +1,7 @@
 import http from "node:http";
+import fs from "node:fs";
+import path from "node:path";
+import crypto from "node:crypto";
 
 import type { FeedbackBridge, FeedbackMedia } from "./agent-interface.js";
 
@@ -12,6 +15,15 @@ const POLL_INTERVAL_MS = parseInt(
   process.env.WPS_FEEDBACK_POLL_MS || "50000",
   10,
 );
+
+const MIME_TYPES: Record<string, string> = {
+  ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+  ".gif": "image/gif", ".webp": "image/webp", ".bmp": "image/bmp",
+  ".svg": "image/svg+xml", ".ico": "image/x-icon",
+  ".mp4": "video/mp4", ".webm": "video/webm", ".mov": "video/quicktime",
+  ".pdf": "application/pdf", ".zip": "application/zip",
+  ".txt": "text/plain", ".json": "application/json",
+};
 
 function log(msg: string) {
   const ts = new Date().toISOString().slice(11, 23);
@@ -37,6 +49,8 @@ export class FeedbackIpcServer implements FeedbackBridge {
   private activeUserId: string | null = null;
   private pending = new Map<string, PendingFeedback>();
   private usedConversations = new Set<string>();
+  /** token -> absolute local path (media file serving) */
+  private mediaFiles = new Map<string, string>();
 
   private sendCallback:
     | ((userId: string, text: string) => Promise<void>)
@@ -48,6 +62,60 @@ export class FeedbackIpcServer implements FeedbackBridge {
 
   setSendCallback(fn: (userId: string, text: string) => Promise<void>): void {
     this.sendCallback = fn;
+  }
+
+  /**
+   * Register a local file for HTTP serving and return its URL.
+   * The file is served at /media/<token>/<filename>.
+   */
+  registerMediaFile(localPath: string): string {
+    const token = crypto.randomBytes(8).toString("hex");
+    this.mediaFiles.set(token, localPath);
+    const filename = encodeURIComponent(path.basename(localPath));
+    const url = `http://127.0.0.1:${this.port}/media/${token}/${filename}`;
+    log(`registered media: ${localPath} → ${url}`);
+    return url;
+  }
+
+  /**
+   * Process text and convert local file markers to served HTTP URLs.
+   * Handles [WOA_IMAGE:path], [WOA_FILE:path], [WOA_VIDEO:path] markers.
+   */
+  processMediaMarkers(text: string): string {
+    return text.replace(
+      /\[(?:WOA|WECHAT|WEIXIN)_(IMAGE|VIDEO|FILE):([^\]]+)\]/g,
+      (_match, _kind: string, rawPath: string) => {
+        const filePath = rawPath.trim();
+        try {
+          if (fs.statSync(filePath).isFile()) {
+            return this.registerMediaFile(filePath);
+          }
+        } catch { /* file not found */ }
+        return filePath;
+      },
+    );
+  }
+
+  private handleMediaRequest(urlPath: string, res: http.ServerResponse): void {
+    const parts = urlPath.replace(/^\/media\//, "").split("/");
+    const token = parts[0];
+    const localPath = this.mediaFiles.get(token ?? "");
+    if (!localPath) {
+      res.writeHead(404); res.end("not found"); return;
+    }
+    try {
+      const stat = fs.statSync(localPath);
+      const ext = path.extname(localPath).toLowerCase();
+      const contentType = MIME_TYPES[ext] ?? "application/octet-stream";
+      res.writeHead(200, {
+        "Content-Type": contentType,
+        "Content-Length": stat.size,
+        "Cache-Control": "public, max-age=3600",
+      });
+      fs.createReadStream(localPath).pipe(res);
+    } catch {
+      res.writeHead(404); res.end("file not found");
+    }
   }
 
   setActiveUser(userId: string): void {
@@ -104,6 +172,10 @@ export class FeedbackIpcServer implements FeedbackBridge {
               res.end(JSON.stringify({ reply: "", error: String(err) }));
             });
           });
+          return;
+        }
+        if (req.method === "GET" && req.url?.startsWith("/media/")) {
+          this.handleMediaRequest(req.url, res);
           return;
         }
         res.writeHead(404);
