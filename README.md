@@ -79,6 +79,18 @@ woa-acp start -- node ./my-agent.js
 
 启动时通过 `node --require mcp-timeout-hook.cjs wps-feedback-server.cjs` 加载 Hook。
 
+### 关键设计
+
+| 要点 | 说明 |
+|------|------|
+| **一次 chat 多轮对话** | Agent 在一次 `agent.chat()` 内通过 MCP 工具实现多轮，无需多次调用 |
+| **Short-Polling** | 每个 HTTP 请求在 50s 后返回空回复（`__WAITING__`），防止 Cursor CLI 的 60s MCP 超时；底层 pending 存活 10 分钟 |
+| **Piggyback 机制** | Agent 因 `__WAITING__` 重试调用时，搭便车到现有 pending 上等待用户回复，不会创建重复的等待 |
+| **Stale 清理** | `clearActiveUser` 立即清除 pending entry 和所有 subscribers，防止旧状态吞掉新消息 |
+| **Race Condition 防护** | 先创建 pending entry 再发送摘要，防止用户快速回复时回复丢失 |
+| **Relay MCP 自动排除** | ACP 模式下自动排除 `relay-mcp`，避免与 `wps-feedback` 冲突 |
+| **MCP 自动注册** | 启动时自动将 `wps-feedback` 注册到 `~/.cursor/mcp.json`，含 timeout hook |
+
 ## 消息发送
 
 当前通过 WebSocket 发送**纯文本**消息（支持 Markdown 格式）。Agentspace 前端会自动渲染 URL 链接和 Markdown。

@@ -18,17 +18,6 @@ function log(msg: string) {
   console.log(`[feedback-ipc ${ts}] ${msg}`);
 }
 
-/** Extract local media file paths from feedback summary text. */
-function extractMediaPaths(text: string): Set<string> {
-  const paths = new Set<string>();
-  for (const m of text.matchAll(/\[WECHAT_IMAGE:([^\]]+)\]/g)) paths.add(m[1]);
-  for (const m of text.matchAll(/!\[[^\]]*\]\(([^)]+)\)/g)) {
-    if (!m[1].startsWith("http")) paths.add(m[1]);
-  }
-  for (const m of text.matchAll(/[A-Z]:[\\\/][^\s"'<>|*?]+\.(png|jpg|jpeg|gif|bmp|webp)/gi)) paths.add(m[0]);
-  for (const m of text.matchAll(/\/[^\s"'<>|*?]+\.(png|jpg|jpeg|gif|bmp|webp)/gi)) paths.add(m[0]);
-  return paths;
-}
 
 type FeedbackReply = {
   text: string;
@@ -41,8 +30,6 @@ type PendingFeedback = {
   createdAt: number;
   /** Buffered reply for late piggyback (user replied between poll cycles). */
   bufferedReply?: FeedbackReply;
-  /** Last summary sent, used to detect new content in piggyback calls. */
-  lastSentSummary?: string;
 };
 
 export class FeedbackIpcServer implements FeedbackBridge {
@@ -177,22 +164,7 @@ export class FeedbackIpcServer implements FeedbackBridge {
       const age = Math.round((Date.now() - existing.createdAt) / 1000);
       log(`piggyback on existing pending for user=${userId} (age=${age}s, subs=${existing.subscribers.length}→${existing.subscribers.length + 1})`);
 
-      if (this.sendCallback && summary && summary !== existing.lastSentSummary) {
-        const newMedia = extractMediaPaths(summary);
-        const oldMedia = existing.lastSentSummary ? extractMediaPaths(existing.lastSentSummary) : new Set<string>();
-        const hasNewMedia = [...newMedia].some((p) => !oldMedia.has(p));
-        if (hasNewMedia) {
-          try {
-            await this.sendCallback(userId, summary);
-            existing.lastSentSummary = summary;
-            log(`sent new summary (piggyback, ${newMedia.size} media) to WPS user=${userId}`);
-          } catch (err) {
-            log(`failed to send piggyback summary: ${err}`);
-          }
-        } else {
-          log(`piggyback summary changed but no new media — skipping re-send`);
-        }
-      }
+      // WPS only supports text — no piggyback re-send needed
 
       const reply = await this.raceWithPoll(
         new Promise<FeedbackReply>((resolve) => {
@@ -238,8 +210,6 @@ export class FeedbackIpcServer implements FeedbackBridge {
         const hint = `💬 追问模式已开启，${timeoutMins} 分钟内回复可继续当前对话`;
         const text = `${summary}\n\n---\n> ${hint}`;
         await this.sendCallback(userId, text);
-        const entry = this.pending.get(userId);
-        if (entry) entry.lastSentSummary = summary;
         log(`sent summary to WPS user=${userId}`);
       } catch (err) {
         log(`failed to send summary: ${err}`);
