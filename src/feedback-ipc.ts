@@ -18,6 +18,18 @@ function log(msg: string) {
   console.log(`[feedback-ipc ${ts}] ${msg}`);
 }
 
+/** Extract local media file paths from feedback summary text. */
+function extractMediaPaths(text: string): Set<string> {
+  const paths = new Set<string>();
+  for (const m of text.matchAll(/\[WECHAT_IMAGE:([^\]]+)\]/g)) paths.add(m[1]);
+  for (const m of text.matchAll(/!\[[^\]]*\]\(([^)]+)\)/g)) {
+    if (!m[1].startsWith("http")) paths.add(m[1]);
+  }
+  for (const m of text.matchAll(/[A-Z]:[\\\/][^\s"'<>|*?]+\.(png|jpg|jpeg|gif|bmp|webp)/gi)) paths.add(m[0]);
+  for (const m of text.matchAll(/\/[^\s"'<>|*?]+\.(png|jpg|jpeg|gif|bmp|webp)/gi)) paths.add(m[0]);
+  return paths;
+}
+
 type FeedbackReply = {
   text: string;
   media?: FeedbackMedia;
@@ -166,12 +178,19 @@ export class FeedbackIpcServer implements FeedbackBridge {
       log(`piggyback on existing pending for user=${userId} (age=${age}s, subs=${existing.subscribers.length}→${existing.subscribers.length + 1})`);
 
       if (this.sendCallback && summary && summary !== existing.lastSentSummary) {
-        try {
-          await this.sendCallback(userId, summary);
-          existing.lastSentSummary = summary;
-          log(`sent new summary (piggyback) to WPS user=${userId}`);
-        } catch (err) {
-          log(`failed to send piggyback summary: ${err}`);
+        const newMedia = extractMediaPaths(summary);
+        const oldMedia = existing.lastSentSummary ? extractMediaPaths(existing.lastSentSummary) : new Set<string>();
+        const hasNewMedia = [...newMedia].some((p) => !oldMedia.has(p));
+        if (hasNewMedia) {
+          try {
+            await this.sendCallback(userId, summary);
+            existing.lastSentSummary = summary;
+            log(`sent new summary (piggyback, ${newMedia.size} media) to WPS user=${userId}`);
+          } catch (err) {
+            log(`failed to send piggyback summary: ${err}`);
+          }
+        } else {
+          log(`piggyback summary changed but no new media — skipping re-send`);
         }
       }
 
